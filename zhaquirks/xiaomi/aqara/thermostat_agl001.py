@@ -38,7 +38,7 @@ SCHEDULE_SETTINGS = 0x0276
 SENSOR = 0x027E
 BATTERY_PERCENTAGE = 0x040A
 
-#EXTERNAL SENSOR CALIBRATION
+# EXTERNAL SENSOR CALIBRATION
 SENSOR_TEMP = 0x1392  # Fake address to pass external sensor temperature
 SENSOR_ATTR = 0xFFF2
 SENSOR_ATTR_NAME = "sensor_attr"
@@ -384,7 +384,7 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
             SENSOR: ("sensor", t.uint8_t, True),
             BATTERY_PERCENTAGE: ("battery_percentage", t.uint8_t, True),
 
-            #EXTERNAL SENSOR
+            # EXTERNAL SENSOR
             SENSOR_TEMP: ("sensor_temp", t.uint32_t, True),
             SENSOR_ATTR: (SENSOR_ATTR_NAME, t.LVBytes, True),
         }
@@ -396,7 +396,7 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
             self.endpoint.power.battery_percent_reported(value)
         
         elif attrid == SENSOR_TEMP: 
-            #EXTERNAL SENSOR
+            # EXTERNAL SENSOR
             pass
         
         elif attrid == SYSTEM_MODE:
