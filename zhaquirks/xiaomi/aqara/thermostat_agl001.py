@@ -383,6 +383,7 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
             SCHEDULE_SETTINGS: ("schedule_settings", ScheduleSettings, True),
             SENSOR: ("sensor", t.uint8_t, True),
             BATTERY_PERCENTAGE: ("battery_percentage", t.uint8_t, True),
+
             #EXTERNAL SENSOR
             SENSOR_TEMP: ("sensor_temp", t.uint32_t, True),
             SENSOR_ATTR: (SENSOR_ATTR_NAME, t.LVBytes, True),
@@ -393,6 +394,11 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         self.debug("Updating attribute on Xiaomi cluster %s with %s", attrid, value)
         if attrid == BATTERY_PERCENTAGE:
             self.endpoint.power.battery_percent_reported(value)
+        
+        elif attrid == SENSOR_TEMP: 
+            #EXTERNAL SENSOR
+            pass
+        
         elif attrid == SYSTEM_MODE:
             # update ZCL system_mode attribute (e.g. on attribute reports)
             self.endpoint.thermostat.update_attribute(
