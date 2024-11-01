@@ -38,6 +38,11 @@ SCHEDULE_SETTINGS = 0x0276
 SENSOR = 0x027E
 BATTERY_PERCENTAGE = 0x040A
 
+#EXTERNAL SENSOR CALIBRATION
+SENSOR_TEMP = 0x1392  # Fake address to pass external sensor temperature
+SENSOR_ATTR = 0xFFF2
+SENSOR_ATTR_NAME = "sensor_attr"
+
 XIAOMI_CLUSTER_ID = 0xFCC0
 
 DAYS_MAP = {
@@ -378,6 +383,9 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
             SCHEDULE_SETTINGS: ("schedule_settings", ScheduleSettings, True),
             SENSOR: ("sensor", t.uint8_t, True),
             BATTERY_PERCENTAGE: ("battery_percentage", t.uint8_t, True),
+            #EXTERNAL SENSOR
+            SENSOR_TEMP: ("sensor_temp", t.uint32_t, True),
+            SENSOR_ATTR: (SENSOR_ATTR_NAME, t.LVBytes, True),
         }
     )
 
@@ -404,6 +412,12 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         attribute_value=1,
         cluster_id=AqaraThermostatSpecificCluster.cluster_id,
         translation_key="calibrate",
+    )
+    .number(
+        attribute_name="sensor_temp",
+        attribute_value=1,
+        cluster_id=AqaraThermostatSpecificCluster.cluster_id,
+        translation_key="sensor_temp",
     )
     .add_to_registry()
 )
