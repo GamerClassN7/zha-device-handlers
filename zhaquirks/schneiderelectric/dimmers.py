@@ -1,129 +1,121 @@
 """Schneider Electric dimmers and switches quirks."""
 
-from zigpy.profiles import zgp, zha
-from zigpy.quirks import CustomDevice
-from zigpy.zcl.clusters.closures import WindowCovering
-from zigpy.zcl.clusters.general import (
-    Basic,
-    GreenPowerProxy,
-    Groups,
-    Identify,
-    LevelControl,
-    OnOff,
-    Ota,
-    Scenes,
+from zhaquirks.builder import (
+    EntityPlatform,
+    EntityType,
+    NumberDeviceClass,
+    QuirkBuilder,
+    UnitOfTime,
 )
-from zigpy.zcl.clusters.homeautomation import Diagnostic
-from zigpy.zcl.clusters.lighting import Ballast
-
-from zhaquirks.const import (
-    DEVICE_TYPE,
-    ENDPOINTS,
-    INPUT_CLUSTERS,
-    MODELS_INFO,
-    OUTPUT_CLUSTERS,
-    PROFILE_ID,
+from zhaquirks.schneiderelectric import (
+    SE_MANUF_NAME,
+    SEBallast,
+    SEBasic,
+    SEControlMode,
+    SEDimmingCurve,
+    SEOnOff,
+    SESwitchAction,
+    SESwitchConfiguration,
+    SESwitchIndication,
+    SEWiringMode,
 )
-from zhaquirks.schneiderelectric import SE_MANUF_NAME, SEBallast, SEBasic, SESpecific
 
+base_micro_dimmer = (
+    QuirkBuilder()
+    .replaces(SEBasic, endpoint_id=3)
+    .replaces(SEBallast, endpoint_id=3)
+    .replaces(SEOnOff, endpoint_id=3)
+    .number(
+        attribute_name=SEOnOff.AttributeDefs.se_on_time_reload.name,
+        cluster_id=SEOnOff.cluster_id,
+        endpoint_id=3,
+        min_value=0,
+        max_value=0xFFFFFFFF,
+        step=1,
+        unit=UnitOfTime.SECONDS,
+        device_class=NumberDeviceClass.DURATION,
+        translation_key="on_time_reload",
+        fallback_name="On time reload",
+    )
+    .number(
+        attribute_name=SEOnOff.AttributeDefs.se_pre_warning_time.name,
+        cluster_id=SEOnOff.cluster_id,
+        endpoint_id=3,
+        min_value=0,
+        max_value=6553,
+        step=1,
+        unit=UnitOfTime.SECONDS,
+        device_class=NumberDeviceClass.DURATION,
+        translation_key="pre_warning_time",
+        fallback_name="Pre warning time",
+    )
+    .enum(
+        attribute_name=SEBallast.AttributeDefs.se_control_mode.name,
+        enum_class=SEControlMode,
+        cluster_id=SEBallast.cluster_id,
+        endpoint_id=3,
+        translation_key="control_mode",
+        fallback_name="Control mode",
+    )
+)
 
-class NHRotaryDimmer1(CustomDevice):
-    """NHROTARY/DIMMER/1 by Schneider Electric."""
+base_dimmer = (
+    base_micro_dimmer.clone()
+    .replaces(SEBasic, endpoint_id=21)
+    .replaces(SESwitchConfiguration, endpoint_id=21)
+    .enum(
+        attribute_name=SESwitchConfiguration.AttributeDefs.se_switch_indication.name,
+        enum_class=SESwitchIndication,
+        cluster_id=SESwitchConfiguration.cluster_id,
+        endpoint_id=21,
+        translation_key="switch_indication",
+        fallback_name="Switch indication",
+    )
+    .enum(
+        attribute_name=SESwitchConfiguration.AttributeDefs.se_switch_actions.name,
+        enum_class=SESwitchAction,
+        cluster_id=SESwitchConfiguration.cluster_id,
+        endpoint_id=21,
+        translation_key="switch_actions",
+        fallback_name="Switch actions",
+    )
+)
 
-    signature = {
-        MODELS_INFO: [
-            (SE_MANUF_NAME, "NHROTARY/DIMMER/1"),
-        ],
-        ENDPOINTS: {
-            3: {
-                PROFILE_ID: zha.PROFILE_ID,
-                DEVICE_TYPE: zha.DeviceType.DIMMABLE_LIGHT,
-                INPUT_CLUSTERS: [
-                    Basic.cluster_id,
-                    Identify.cluster_id,
-                    Groups.cluster_id,
-                    Scenes.cluster_id,
-                    OnOff.cluster_id,
-                    LevelControl.cluster_id,
-                    Ballast.cluster_id,
-                    Diagnostic.cluster_id,
-                ],
-                OUTPUT_CLUSTERS: [
-                    Ota.cluster_id,
-                ],
-            },
-            21: {
-                PROFILE_ID: zha.PROFILE_ID,
-                DEVICE_TYPE: zha.DeviceType.DIMMER_SWITCH,
-                INPUT_CLUSTERS: [
-                    Basic.cluster_id,
-                    Identify.cluster_id,
-                    Diagnostic.cluster_id,
-                    SESpecific.cluster_id,
-                ],
-                OUTPUT_CLUSTERS: [
-                    Identify.cluster_id,
-                    Groups.cluster_id,
-                    Scenes.cluster_id,
-                    OnOff.cluster_id,
-                    LevelControl.cluster_id,
-                    WindowCovering.cluster_id,
-                ],
-            },
-            242: {
-                PROFILE_ID: zgp.PROFILE_ID,
-                DEVICE_TYPE: zgp.DeviceType.PROXY_BASIC,
-                INPUT_CLUSTERS: [],
-                OUTPUT_CLUSTERS: [
-                    GreenPowerProxy.cluster_id,
-                ],
-            },
-        },
-    }
-    replacement = {
-        ENDPOINTS: {
-            3: {
-                PROFILE_ID: zha.PROFILE_ID,
-                DEVICE_TYPE: zha.DeviceType.DIMMABLE_LIGHT,
-                INPUT_CLUSTERS: [
-                    SEBasic,
-                    Identify.cluster_id,
-                    Groups.cluster_id,
-                    Scenes.cluster_id,
-                    OnOff.cluster_id,
-                    LevelControl.cluster_id,
-                    SEBallast,
-                    Diagnostic.cluster_id,
-                ],
-                OUTPUT_CLUSTERS: [
-                    Ota.cluster_id,
-                ],
-            },
-            21: {
-                PROFILE_ID: zha.PROFILE_ID,
-                DEVICE_TYPE: zha.DeviceType.DIMMER_SWITCH,
-                INPUT_CLUSTERS: [
-                    SEBasic,
-                    Identify.cluster_id,
-                    Diagnostic.cluster_id,
-                    SESpecific,
-                ],
-                OUTPUT_CLUSTERS: [
-                    Identify.cluster_id,
-                    Groups.cluster_id,
-                    Scenes.cluster_id,
-                    OnOff.cluster_id,
-                    LevelControl.cluster_id,
-                    WindowCovering.cluster_id,
-                ],
-            },
-            242: {
-                PROFILE_ID: zgp.PROFILE_ID,
-                DEVICE_TYPE: zgp.DeviceType.PROXY_BASIC,
-                INPUT_CLUSTERS: [],
-                OUTPUT_CLUSTERS: [
-                    GreenPowerProxy.cluster_id,
-                ],
-            },
-        }
-    }
+(
+    base_micro_dimmer.clone()
+    .applies_to(SE_MANUF_NAME, "PUCK/DIMMER/1")
+    .add_to_registry()
+)  # fmt: skip
+
+(
+    base_dimmer.clone()
+    .applies_to(SE_MANUF_NAME, "NHROTARY/DIMMER/1")
+    .applies_to(SE_MANUF_NAME, "NHPB/DIMMER/1")
+    .applies_to(SE_MANUF_NAME, "CH/DIMMER/1")
+    .add_to_registry()
+)
+
+(
+    base_dimmer.clone()
+    .applies_to(SE_MANUF_NAME, "NHROTARY/UNIDIM/1")
+    .applies_to(SE_MANUF_NAME, "NHPB/UNIDIM/1")
+    .enum(
+        attribute_name=SEBallast.AttributeDefs.se_wiring_mode.name,
+        enum_class=SEWiringMode,
+        cluster_id=SEBallast.cluster_id,
+        endpoint_id=3,
+        entity_platform=EntityPlatform.SENSOR,
+        entity_type=EntityType.DIAGNOSTIC,
+        translation_key="wiring_mode",
+        fallback_name="Wiring mode",
+    )
+    .enum(
+        attribute_name=SEBallast.AttributeDefs.se_dimming_curve.name,
+        enum_class=SEDimmingCurve,
+        cluster_id=SEBallast.cluster_id,
+        endpoint_id=3,
+        translation_key="dimming_curve",
+        fallback_name="Dimming curve",
+    )
+    .add_to_registry()
+)

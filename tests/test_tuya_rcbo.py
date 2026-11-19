@@ -30,11 +30,18 @@ async def test_command_rcbo(zigpy_device_from_quirk):
 
         await wait_for_zigpy_tasks()
         m1.assert_called_with(
-            61184,
-            1,
-            b"\x01\x01\x00\x00\x01\x01\x01\x00\x01\x01",
-            expect_reply=True,
+            cluster=61184,
+            sequence=1,
+            data=b"\x01\x01\x00\x00\x01\x01\x01\x00\x01\x01",
             command_id=0,
+            timeout=5,
+            expect_reply=True,
+            use_ieee=False,
+            ask_for_ack=None,
+            priority=None,
+            retries=None,
+            retry_delay=None,
+            aps_encryption=False,
         )
         assert rsp.status == foundation.Status.SUCCESS
 
@@ -43,11 +50,18 @@ async def test_command_rcbo(zigpy_device_from_quirk):
 
         await wait_for_zigpy_tasks()
         m1.assert_called_with(
-            61184,
-            2,
-            b"\x01\x02\x00\x00\x02t\x01\x00\x01\x01",
-            expect_reply=True,
+            cluster=61184,
+            sequence=2,
+            data=b"\x01\x02\x00\x00\x02t\x01\x00\x01\x01",
             command_id=0,
+            timeout=5,
+            expect_reply=True,
+            use_ieee=False,
+            ask_for_ack=None,
+            priority=None,
+            retries=None,
+            retry_delay=None,
+            aps_encryption=False,
         )
         assert rsp.status == foundation.Status.SUCCESS
 
@@ -56,11 +70,18 @@ async def test_command_rcbo(zigpy_device_from_quirk):
 
         await wait_for_zigpy_tasks()
         m1.assert_called_with(
-            61184,
-            3,
-            b"\x01\x03\x00\x00\x03s\x01\x00\x01\x01",
-            expect_reply=True,
+            cluster=61184,
+            sequence=3,
+            data=b"\x01\x03\x00\x00\x03s\x01\x00\x01\x01",
             command_id=0,
+            timeout=5,
+            expect_reply=True,
+            use_ieee=False,
+            ask_for_ack=None,
+            priority=None,
+            retries=None,
+            retry_delay=None,
+            aps_encryption=False,
         )
         assert rsp.status == foundation.Status.SUCCESS
 
@@ -244,7 +265,7 @@ async def test_report_values_rcbo(zigpy_device_from_quirk, frame, cluster, attri
         ),
         (
             [],
-            b'\x01\x04\x00\x00\x06n\x00\x00\x08\x0b"\x00\x00\x01\xf4\x00\x00',
+            b'\x01\x04\x00\x00\x05n\x00\x00\x08\x0b"\x00\x00\x01\xf4\x00\x00',
             "electrical_measurement",
             {
                 "rms_extreme_over_voltage": 2850,
@@ -305,11 +326,18 @@ async def test_write_attr_rcbo(
         (status,) = await target_cluster.write_attributes(attributes)
         await wait_for_zigpy_tasks()
         m1.assert_called_with(
-            61184,
-            frame[1],
-            frame,
-            expect_reply=False,
+            cluster=61184,
+            sequence=frame[1],
+            data=frame,
             command_id=0,
+            timeout=5,
+            expect_reply=False,
+            use_ieee=False,
+            ask_for_ack=None,
+            priority=None,
+            retries=None,
+            retry_delay=None,
+            aps_encryption=False,
         )
         assert status == [
             foundation.WriteAttributesStatusRecord(foundation.Status.SUCCESS)

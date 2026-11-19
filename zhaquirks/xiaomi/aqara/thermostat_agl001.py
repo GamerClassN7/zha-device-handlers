@@ -5,15 +5,16 @@ from __future__ import annotations
 from functools import reduce
 import math
 import struct
-from typing import Any
+from typing import Any, Final
 
-from zigpy.quirks import CustomCluster
-from zigpy.quirks.v2 import QuirkBuilder
 import zigpy.types as t
-from zigpy.zcl import ClusterType
+from zigpy.zcl import ClusterType, foundation
 from zigpy.zcl.clusters.general import Ota
 from zigpy.zcl.clusters.hvac import Thermostat
+from zigpy.zcl.foundation import ZCLAttributeDef
 
+from zhaquirks.builder import QuirkBuilder
+from zhaquirks.clusters import CustomCluster
 from zhaquirks.xiaomi import LUMI, XiaomiAqaraE1Cluster, XiaomiPowerConfiguration
 
 ZCL_SYSTEM_MODE = Thermostat.attributes_by_name["system_mode"].id
@@ -69,11 +70,9 @@ class ThermostatCluster(CustomCluster, Thermostat):
 
     async def read_attributes(
         self,
-        attributes: list[int | str],
-        allow_cache: bool = False,
-        only_cache: bool = False,
-        manufacturer: int | t.uint16_t | None = None,
-    ):
+        attributes: list[int | str | foundation.ZCLAttributeDef],
+        **kwargs,
+    ) -> Any:
         """Pass reading attributes to Xiaomi cluster if applicable."""
         successful_r, failed_r = {}, {}
         remaining_attributes = attributes.copy()
@@ -88,25 +87,28 @@ class ThermostatCluster(CustomCluster, Thermostat):
                 remaining_attributes.remove("system_mode")
 
             successful_r, failed_r = await self.endpoint.opple_cluster.read_attributes(
-                [SYSTEM_MODE], allow_cache, only_cache, manufacturer
+                [SYSTEM_MODE], **kwargs
             )
             # convert Xiaomi system_mode to ZCL attribute
             if SYSTEM_MODE in successful_r:
-                successful_r[ZCL_SYSTEM_MODE] = XIAOMI_SYSTEM_MODE_MAP[
-                    successful_r.pop(SYSTEM_MODE)
-                ]
+                mapped_value = XIAOMI_SYSTEM_MODE_MAP[successful_r.pop(SYSTEM_MODE)]
+                successful_r[ZCL_SYSTEM_MODE] = mapped_value
+                # Update the thermostat cluster's cache
+                self._update_attribute(ZCL_SYSTEM_MODE, mapped_value)
         # read remaining attributes from thermostat cluster
         if remaining_attributes:
             remaining_result = await super().read_attributes(
-                remaining_attributes, allow_cache, only_cache, manufacturer
+                remaining_attributes, **kwargs
             )
             successful_r.update(remaining_result[0])
             failed_r.update(remaining_result[1])
         return successful_r, failed_r
 
     async def write_attributes(
-        self, attributes: dict[str | int, Any], manufacturer: int | None = None
-    ) -> list:
+        self,
+        attributes: dict[str | int | foundation.ZCLAttributeDef, Any],
+        **kwargs,
+    ) -> list[list[foundation.WriteAttributesStatusRecord]]:
         """Pass writing attributes to Xiaomi cluster if applicable."""
         result = []
         remaining_attributes = attributes.copy()
@@ -124,12 +126,14 @@ class ThermostatCluster(CustomCluster, Thermostat):
         if system_mode_value is not None:
             self.debug("Passing 'system_mode' write to Xiaomi cluster")
             result += await self.endpoint.opple_cluster.write_attributes(
-                {SYSTEM_MODE: min(int(system_mode_value), 1)}
+                {SYSTEM_MODE: min(int(system_mode_value), 1)}, **kwargs
             )
+            # Update the thermostat cluster's cache
+            self._update_attribute(ZCL_SYSTEM_MODE, system_mode_value)
 
         # write remaining attributes to thermostat cluster
         if remaining_attributes:
-            result += await super().write_attributes(remaining_attributes, manufacturer)
+            result += await super().write_attributes(remaining_attributes, **kwargs)
         return result
 
 
@@ -192,9 +196,9 @@ class ScheduleEvent:
 
     @staticmethod
     def _validate_time(time):
-        if time <= 0:
+        if time < 0:
             raise ValueError("Time must be between 00:00 and 23:59")
-        if time > 24 * 60:
+        if time >= 24 * 60:
             raise ValueError("Time must be between 00:00 and 23:59")
 
     @staticmethod
@@ -366,28 +370,59 @@ class ScheduleSettings(t.LVBytes):
 class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
     """Aqara manufacturer specific settings."""
 
-    attributes = XiaomiAqaraE1Cluster.attributes.copy()
-    attributes.update(
-        {
-            CALIBRATE: ("calibrate", t.uint8_t, True),
-            SYSTEM_MODE: ("system_mode", t.uint8_t, True),
-            PRESET: ("preset", t.uint8_t, True),
-            WINDOW_DETECTION: ("window_detection", t.uint8_t, True),
-            VALVE_DETECTION: ("valve_detection", t.uint8_t, True),
-            VALVE_ALARM: ("valve_alarm", t.uint8_t, True),
-            CHILD_LOCK: ("child_lock", t.uint8_t, True),
-            AWAY_PRESET_TEMPERATURE: ("away_preset_temperature", t.uint32_t, True),
-            WINDOW_OPEN: ("window_open", t.uint8_t, True),
-            CALIBRATED: ("calibrated", t.uint8_t, True),
-            SCHEDULE: ("schedule", t.uint8_t, True),
-            SCHEDULE_SETTINGS: ("schedule_settings", ScheduleSettings, True),
-            SENSOR: ("sensor", t.uint8_t, True),
-            BATTERY_PERCENTAGE: ("battery_percentage", t.uint8_t, True),
-            # EXTERNAL SENSOR
-            SENSOR_TEMP: ("sensor_temp", t.uint32_t, True),
-            SENSOR_ATTR: (SENSOR_ATTR_NAME, t.LVBytes, True),
-        }
-    )
+    class AttributeDefs(XiaomiAqaraE1Cluster.AttributeDefs):
+        """Attribute definitions."""
+
+        system_mode: Final = ZCLAttributeDef(
+            id=SYSTEM_MODE, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        preset: Final = ZCLAttributeDef(
+            id=PRESET, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        window_detection: Final = ZCLAttributeDef(
+            id=WINDOW_DETECTION, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        valve_detection: Final = ZCLAttributeDef(
+            id=VALVE_DETECTION, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        valve_alarm: Final = ZCLAttributeDef(
+            id=VALVE_ALARM, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        child_lock: Final = ZCLAttributeDef(
+            id=CHILD_LOCK, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        away_preset_temperature: Final = ZCLAttributeDef(
+            id=AWAY_PRESET_TEMPERATURE, type=t.uint32_t, is_manufacturer_specific=True
+        )
+        window_open: Final = ZCLAttributeDef(
+            id=WINDOW_OPEN, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        calibrated: Final = ZCLAttributeDef(
+            id=CALIBRATED, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        schedule: Final = ZCLAttributeDef(
+            id=SCHEDULE, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        schedule_settings: Final = ZCLAttributeDef(
+            id=SCHEDULE_SETTINGS, type=ScheduleSettings, is_manufacturer_specific=True
+        )
+        sensor: Final = ZCLAttributeDef(
+            id=SENSOR, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        battery_percentage: Final = ZCLAttributeDef(
+            id=BATTERY_PERCENTAGE, type=t.uint8_t, is_manufacturer_specific=True
+        )
+
+        calibrate: Final = ZCLAttributeDef(
+            id=CALIBRATE, type=t.uint8_t, is_manufacturer_specific=True
+        )
+        # EXTERNAL SENSOR
+        sensor_temp: Final = ZCLAttributeDef(
+            id=SENSOR_TEMP, type=t.uint32_t, is_manufacturer_specific=True
+        )
+        sensor_attr: Final = ZCLAttributeDef(
+            id=SENSOR_ATTR, type=t.LVBytes, is_manufacturer_specific=True
+        )
 
     def _update_attribute(self, attrid, value):
         self.debug("Updating attribute on Xiaomi cluster %s with %s", attrid, value)
@@ -417,12 +452,13 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         attribute_value=1,
         cluster_id=AqaraThermostatSpecificCluster.cluster_id,
         translation_key="calibrate",
+        fallback_name="Calibrate",
     )
     .number(
         attribute_name="sensor_temp",
-        attribute_value=1,
         cluster_id=AqaraThermostatSpecificCluster.cluster_id,
         translation_key="sensor_temp",
+        fallback_name="Sensor temperature",
     )
     .add_to_registry()
 )
