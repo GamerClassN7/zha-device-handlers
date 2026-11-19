@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import reduce
 import math
 import struct
+import time
 from typing import Any, Final
 
 import zigpy.types as t
@@ -43,6 +44,8 @@ BATTERY_PERCENTAGE = 0x040A
 SENSOR_TEMP = 0x1392  # Fake address to pass external sensor temperature
 SENSOR_ATTR = 0xFFF2
 SENSOR_ATTR_NAME = "sensor_attr"
+# Fictive sensor ID the TRV accepts as an "external sensor" (same as Zigbee2MQTT)
+FICTIVE_SENSOR = bytes.fromhex("00158d00019d1b98")
 
 XIAOMI_CLUSTER_ID = 0xFCC0
 
@@ -367,6 +370,52 @@ class ScheduleSettings(t.LVBytes):
         return result
 
 
+def _lumi_header(counter: int, params: bytes, action: int) -> bytes:
+    """Build the Aqara frame header placed in front of the 0xFFF2 payload."""
+    header = [0xAA, 0x71, len(params) + 3, 0x44, counter]
+    integrity = (512 - sum(header)) & 0xFF
+    return bytes([*header, integrity, action, 0x41, len(params)])
+
+
+def _external_sensor_frames(ieee: bytes, enable: bool) -> list[bytes]:
+    """Frames that switch the TRV between internal and external temperature sensor."""
+    timestamp = struct.pack(">I", int(time.time()))
+    if enable:
+        params1 = (
+            timestamp
+            + bytes([0x3D, 0x04])
+            + ieee
+            + FICTIVE_SENSOR
+            + bytes.fromhex("00010055130a0200006404cec2b6c80000000000013d6465")
+        )
+        params2 = (
+            timestamp
+            + bytes([0x3D, 0x05])
+            + ieee
+            + FICTIVE_SENSOR
+            + bytes.fromhex("080007fd160a020ac9e8b1b8d4dacfdfc0eb0000000000013d0465")
+        )
+        action = 0x02
+    else:
+        params1 = timestamp + bytes([0x3D, 0x05]) + ieee + bytes(12)
+        params2 = timestamp + bytes([0x3D, 0x04]) + ieee + bytes(12)
+        action = 0x04
+    return [
+        _lumi_header(0x12, params1, action) + params1,
+        _lumi_header(0x13, params2, action) + params2,
+    ]
+
+
+def _external_temperature_frame(centi_degrees: int) -> bytes:
+    """Frame carrying the external temperature (float32, hundredths of a degree)."""
+    params = (
+        FICTIVE_SENSOR
+        + bytes([0x00, 0x01, 0x00, 0x55])
+        + struct.pack(">f", float(centi_degrees))
+    )
+    return _lumi_header(0x12, params, 0x05) + params
+
+
 class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
     """Aqara manufacturer specific settings."""
 
@@ -418,11 +467,49 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         )
         # EXTERNAL SENSOR
         sensor_temp: Final = ZCLAttributeDef(
-            id=SENSOR_TEMP, type=t.uint32_t, is_manufacturer_specific=True
+            id=SENSOR_TEMP, type=t.int32s, is_manufacturer_specific=True
         )
         sensor_attr: Final = ZCLAttributeDef(
             id=SENSOR_ATTR, type=t.LVBytes, is_manufacturer_specific=True
         )
+
+    async def write_attributes(
+        self,
+        attributes: dict[str | int | foundation.ZCLAttributeDef, Any],
+        **kwargs,
+    ) -> list[list[foundation.WriteAttributesStatusRecord]]:
+        """Handle external temperature sensor writes, pass the rest through."""
+        remaining = {}
+        sensor_mode = None
+        sensor_temp = None
+
+        for attr, value in attributes.items():
+            if attr in (SENSOR, "sensor"):
+                sensor_mode = value
+            elif attr in (SENSOR_TEMP, "sensor_temp"):
+                sensor_temp = value
+            else:
+                remaining[attr] = value
+
+        result = []
+        ieee = bytes.fromhex(str(self.endpoint.device.ieee).replace(":", ""))
+
+        if sensor_mode is not None:
+            self.debug("Switching external sensor mode: %s", sensor_mode)
+            for frame in _external_sensor_frames(ieee, bool(int(sensor_mode))):
+                result += await super().write_attributes({SENSOR_ATTR: frame}, **kwargs)
+            self._update_attribute(SENSOR, int(sensor_mode))
+
+        if sensor_temp is not None:
+            self.debug("Sending external temperature: %s", sensor_temp)
+            result += await super().write_attributes(
+                {SENSOR_ATTR: _external_temperature_frame(int(sensor_temp))}, **kwargs
+            )
+            self._update_attribute(SENSOR_TEMP, int(sensor_temp))
+
+        if remaining:
+            result += await super().write_attributes(remaining, **kwargs)
+        return result
 
     def _update_attribute(self, attrid, value):
         self.debug("Updating attribute on Xiaomi cluster %s with %s", attrid, value)
@@ -454,9 +541,20 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         translation_key="calibrate",
         fallback_name="Calibrate",
     )
+    .switch(
+        attribute_name="sensor",
+        cluster_id=AqaraThermostatSpecificCluster.cluster_id,
+        translation_key="external_sensor",
+        fallback_name="External temperature sensor",
+    )
     .number(
         attribute_name="sensor_temp",
         cluster_id=AqaraThermostatSpecificCluster.cluster_id,
+        min_value=-100,
+        max_value=100,
+        step=0.1,
+        unit="°C",
+        multiplier=0.01,
         translation_key="sensor_temp",
         fallback_name="Sensor temperature",
     )

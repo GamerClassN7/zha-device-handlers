@@ -4,6 +4,7 @@ import asyncio
 import itertools
 import logging
 import math
+import struct
 from typing import Any
 from unittest import mock
 
@@ -3482,3 +3483,45 @@ async def test_w100_ignores_zcl_battery_reports(zigpy_device_from_v2_quirk):
 
     assert len(task_mock.mock_calls) == 1
     task_mock.call_args.args[0].close()  # discard the un-awaited response coroutine
+
+
+async def test_xiaomi_e1_thermostat_external_sensor(zigpy_device_from_v2_quirk):
+    """Test external temperature sensor frames sent by the Xiaomi E1 thermostat."""
+
+    device = zigpy_device_from_v2_quirk("LUMI", "lumi.airrtc.agl001")
+    opple_cluster = device.endpoints[1].opple_cluster
+    ieee = bytes.fromhex(str(device.ieee).replace(":", ""))
+
+    with mock.patch.object(
+        zhaquirks.xiaomi.XiaomiAqaraE1Cluster,
+        "write_attributes",
+        mock.AsyncMock(return_value=[[foundation.WriteAttributesStatusRecord(0)]]),
+    ) as write_mock:
+        # enable external sensor -> two pairing frames
+        await opple_cluster.write_attributes({"sensor": 1})
+        assert write_mock.await_count == 2
+        frames = [call.args[0][0xFFF2] for call in write_mock.await_args_list]
+        for frame, counter in zip(frames, (0x12, 0x13)):
+            assert frame[:2] == b"\xaa\x71"
+            assert frame[2] == len(frame) - 9 + 3
+            assert frame[4] == counter
+            assert (sum(frame[:5]) + frame[5]) & 0xFF == 0
+            assert frame[6] == 0x02  # enable action
+            assert ieee in frame
+
+        write_mock.reset_mock()
+
+        # disable -> internal action
+        await opple_cluster.write_attributes({"sensor": 0})
+        assert write_mock.await_count == 2
+        assert write_mock.await_args_list[0].args[0][0xFFF2][6] == 0x04
+
+        write_mock.reset_mock()
+
+        # temperature 21.5 °C is sent as float32(2150)
+        await opple_cluster.write_attributes({"sensor_temp": 2150})
+        assert write_mock.await_count == 1
+        frame = write_mock.await_args.args[0][0xFFF2]
+        assert frame[6] == 0x05
+        assert frame[-4:] == struct.pack(">f", 2150.0)
+        assert frame[9 : 9 + 8] == bytes.fromhex("00158d00019d1b98")
