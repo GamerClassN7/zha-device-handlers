@@ -42,6 +42,7 @@ BATTERY_PERCENTAGE = 0x040A
 
 # EXTERNAL SENSOR CALIBRATION
 SENSOR_TEMP = 0x1392  # Fake address to pass external sensor temperature
+SENSOR_MODE = 0x1393  # Fake address for the external sensor on/off switch
 SENSOR_ATTR = 0xFFF2
 SENSOR_ATTR_NAME = "sensor_attr"
 # Fictive sensor ID the TRV accepts as an "external sensor" (same as Zigbee2MQTT)
@@ -469,6 +470,9 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         sensor_temp: Final = ZCLAttributeDef(
             id=SENSOR_TEMP, type=t.int32s, is_manufacturer_specific=True
         )
+        sensor_mode: Final = ZCLAttributeDef(
+            id=SENSOR_MODE, type=t.uint8_t, is_manufacturer_specific=True
+        )
         sensor_attr: Final = ZCLAttributeDef(
             id=SENSOR_ATTR, type=t.LVBytes, is_manufacturer_specific=True
         )
@@ -484,7 +488,7 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         sensor_temp = None
 
         for attr, value in attributes.items():
-            if attr in (SENSOR, "sensor"):
+            if attr in (SENSOR_MODE, "sensor_mode"):
                 sensor_mode = value
             elif attr in (SENSOR_TEMP, "sensor_temp"):
                 sensor_temp = value
@@ -498,7 +502,7 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
             self.debug("Switching external sensor mode: %s", sensor_mode)
             for frame in _external_sensor_frames(ieee, bool(int(sensor_mode))):
                 result += await super().write_attributes({SENSOR_ATTR: frame}, **kwargs)
-            self._update_attribute(SENSOR, int(sensor_mode))
+            self._update_attribute(SENSOR_MODE, int(sensor_mode))
 
         if sensor_temp is not None:
             self.debug("Sending external temperature: %s", sensor_temp)
@@ -542,10 +546,10 @@ class AqaraThermostatSpecificCluster(XiaomiAqaraE1Cluster):
         fallback_name="Calibrate",
     )
     .switch(
-        attribute_name="sensor",
+        attribute_name="sensor_mode",
         cluster_id=AqaraThermostatSpecificCluster.cluster_id,
-        translation_key="external_sensor",
-        fallback_name="External temperature sensor",
+        translation_key="external_sensor_mode",
+        fallback_name="Use external temperature sensor",
     )
     .number(
         attribute_name="sensor_temp",

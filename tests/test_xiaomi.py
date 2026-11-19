@@ -3498,7 +3498,7 @@ async def test_xiaomi_e1_thermostat_external_sensor(zigpy_device_from_v2_quirk):
         mock.AsyncMock(return_value=[[foundation.WriteAttributesStatusRecord(0)]]),
     ) as write_mock:
         # enable external sensor -> two pairing frames
-        await opple_cluster.write_attributes({"sensor": 1})
+        await opple_cluster.write_attributes({"sensor_mode": 1})
         assert write_mock.await_count == 2
         frames = [call.args[0][0xFFF2] for call in write_mock.await_args_list]
         for frame, counter in zip(frames, (0x12, 0x13)):
@@ -3512,7 +3512,7 @@ async def test_xiaomi_e1_thermostat_external_sensor(zigpy_device_from_v2_quirk):
         write_mock.reset_mock()
 
         # disable -> internal action
-        await opple_cluster.write_attributes({"sensor": 0})
+        await opple_cluster.write_attributes({"sensor_mode": 0})
         assert write_mock.await_count == 2
         assert write_mock.await_args_list[0].args[0][0xFFF2][6] == 0x04
 
